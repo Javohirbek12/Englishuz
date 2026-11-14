@@ -1,0 +1,27 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname, '..');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+const sw = fs.readFileSync(path.join(root, 'service-worker.js'), 'utf8');
+const checks = [];
+function check(name, ok) { checks.push({name, ok: Boolean(ok)}); }
+check('Manifest name and short_name', !!manifest.name && !!manifest.short_name);
+check('Manifest standalone display', manifest.display === 'standalone');
+check('Manifest start_url and scope are relative', manifest.start_url.startsWith('./') && manifest.scope === './');
+check('Manifest 192px icon', manifest.icons.some(x => x.sizes === '192x192'));
+check('Manifest 512px icon', manifest.icons.some(x => x.sizes === '512x512'));
+check('Manifest maskable icon', manifest.icons.some(x => x.purpose === 'maskable'));
+check('HTML links the web manifest', /rel=["']manifest["']\s+href=["']manifest\.webmanifest["']/.test(html));
+check('HTML has Apple touch icon', html.includes('assets/icons/apple-touch-icon.png'));
+check('Install button exists', html.includes('id="pwa-install-button"'));
+check('Install prompt listener exists', html.includes('beforeinstallprompt'));
+check('Service worker registration exists', html.includes("serviceWorker.register('./service-worker.js'"));
+check('Service worker caches app shell', sw.includes('APP_SHELL') && sw.includes('./index.html'));
+check('Service worker skips cross-origin requests', sw.includes('url.origin !== self.location.origin'));
+check('README has Android and iOS install directions', /Android \(Chrome/.test(fs.readFileSync(path.join(root, 'README.md'), 'utf8')) && /iPhone \(Safari\)/.test(fs.readFileSync(path.join(root, 'README.md'), 'utf8')));
+for (const icon of ['icon-192.png','icon-512.png','icon-maskable-512.png','apple-touch-icon.png']) check(`Icon exists: ${icon}`, fs.existsSync(path.join(root,'assets/icons',icon)) && fs.statSync(path.join(root,'assets/icons',icon)).size > 1000);
+const failed = checks.filter(x => !x.ok);
+for (const c of checks) console.log(`${c.ok ? 'PASS' : 'FAIL'} ${c.name}`);
+console.log(`\n${checks.length - failed.length}/${checks.length} PWA checks passed`);
+if (failed.length) process.exit(1);
